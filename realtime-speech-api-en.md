@@ -368,9 +368,123 @@ Sent after receiving hello ack to notify the server to start listening.
 
 #### 3. Audio Data (Binary Message)
 
+Audio data sent by the client needs to have a 4-byte header added before being sent via WebSocket binary message.
+
+**Audio Parameters:**
 - **Format:** Opus encoded audio data
-- **Parameters:** 16kHz, mono, 60ms frame duration
-- **Transmission:** Binary WebSocket message
+- **Sample Rate:** 16kHz
+- **Channels:** mono (single channel)
+- **Frame Duration:** 60ms
+
+**Binary Data Structure:**
+
+```
+[0]: header byte 0 (fixed as 0)
+[1]: header byte 1 (fixed as 0)
+[2-3]: payload size (2 bytes, big-endian)
+[4-...]: opus payload
+```
+
+**Header Field Description:**
+
+| Byte Position | Field Name | Type | Description |
+|---------------|------------|------|-------------|
+| [0] | header byte 0 | Byte | Fixed as 0 |
+| [1] | header byte 1 | Byte | Fixed as 0 |
+| [2] | payload size (high) | Byte | High byte of payload length (big-endian) |
+| [3] | payload size (low) | Byte | Low byte of payload length (big-endian) |
+| [4-...] | opus payload | Byte[] | Opus encoded audio data |
+
+**Sending Steps:**
+
+1. Prepare Opus encoded audio data (payload)
+2. Create 4-byte header:
+   - Byte 0: set to 0
+   - Byte 1: set to 0
+   - Byte 2: high byte of payload length `(payload.length >> 8) & 0xFF`
+   - Byte 3: low byte of payload length `payload.length & 0xFF`
+3. Combine header and payload into complete binary data:
+   - Create byte array with length `4 + payload.length`
+   - Copy header (4 bytes) to the first 4 positions of the array
+   - Copy payload to the array starting from byte 4
+4. Send binary message via WebSocket
+
+**Example Code Logic:**
+
+**Java Example:**
+
+```java
+// Prepare Opus data
+byte[] opusPayload = ...; // Opus encoded audio data
+
+// Create complete data with header
+byte[] payloadWithHeader = new byte[4 + opusPayload.length];
+payloadWithHeader[0] = 0;  // header byte 0
+payloadWithHeader[1] = 0;  // header byte 1
+// Write payload length in big-endian format
+payloadWithHeader[2] = (byte) ((opusPayload.length >> 8) & 0xFF);  // high byte
+payloadWithHeader[3] = (byte) (opusPayload.length & 0xFF);         // low byte
+// Copy payload starting from byte 4
+System.arraycopy(opusPayload, 0, payloadWithHeader, 4, opusPayload.length);
+
+// Send binary message via WebSocket
+webSocket.send(ByteString.of(payloadWithHeader));
+```
+
+**C Language Example:**
+
+```c
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+// Function: Prepare Opus audio message
+// Parameters: opus_data - Opus encoded audio data
+//             opus_len - Length of Opus data
+// Returns: Complete message with header (caller must free memory)
+uint8_t* prepare_opus_message(const uint8_t* opus_data, size_t opus_len, size_t* total_len) {
+    // Calculate total length: 4-byte header + payload length
+    *total_len = 4 + opus_len;
+    
+    // Allocate memory
+    uint8_t* message = (uint8_t*)malloc(*total_len);
+    if (message == NULL) {
+        return NULL;
+    }
+    
+    // Set header
+    message[0] = 0;  // header byte 0
+    message[1] = 0;  // header byte 1
+    
+    // Write payload length in big-endian format
+    message[2] = (uint8_t)((opus_len >> 8) & 0xFF);  // high byte
+    message[3] = (uint8_t)(opus_len & 0xFF);         // low byte
+    
+    // Copy payload starting from byte 4
+    memcpy(message + 4, opus_data, opus_len);
+    
+    return message;
+}
+
+// Usage example
+void send_audio_example(const uint8_t* opus_data, size_t opus_len) {
+    size_t total_len;
+    uint8_t* message = prepare_opus_message(opus_data, opus_len, &total_len);
+    
+    if (message != NULL) {
+        // Send binary message via WebSocket
+        // websocket_send_binary(message, total_len);
+        
+        // Free memory
+        free(message);
+    }
+}
+```
+
+**Important Notes:**
+- Must wait for hello ack before starting to send audio data
+- Payload length is encoded using big-endian format
+- Header bytes 0 and 1 are fixed as 0
 
 #### 4. Language Switch Message
 

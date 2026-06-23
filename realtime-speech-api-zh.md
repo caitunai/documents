@@ -368,9 +368,123 @@ wss://autodlbjb1.xnestle.com:25864/v1/websocket/xiaozhi?agent_id=2&agent_key=ak_
 
 #### 3. 音频数据（二进制消息）
 
+客户端发送的音频数据需要添加 4 字节头部，然后通过 WebSocket 二进制消息发送。
+
+**音频参数:**
 - **格式:** Opus 编码音频数据
-- **参数:** 16kHz, mono, 60ms frame duration
-- **发送方式:** 二进制 WebSocket 消息
+- **采样率:** 16kHz
+- **声道数:** mono（单声道）
+- **帧时长:** 60ms
+
+**二进制数据结构:**
+
+```
+[0]: header byte 0 (固定为 0)
+[1]: header byte 1 (固定为 0)
+[2-3]: payload size (2 bytes, big-endian)
+[4-...]: opus payload
+```
+
+**头部字段说明:**
+
+| 字节位置 | 字段名 | 类型 | 说明 |
+|---------|--------|------|------|
+| [0] | header byte 0 | Byte | 固定为 0 |
+| [1] | header byte 1 | Byte | 固定为 0 |
+| [2] | payload size (high) | Byte | Payload 长度的高字节（大端序） |
+| [3] | payload size (low) | Byte | Payload 长度的低字节（大端序） |
+| [4-...] | opus payload | Byte[] | Opus 编码的音频数据 |
+
+**发送步骤:**
+
+1. 准备 Opus 编码的音频数据（payload）
+2. 创建 4 字节头部：
+   - 第 0 字节：设置为 0
+   - 第 1 字节：设置为 0
+   - 第 2 字节：payload 长度的高字节 `(payload.length >> 8) & 0xFF`
+   - 第 3 字节：payload 长度的低字节 `payload.length & 0xFF`
+3. 将头部和 payload 组合成完整的二进制数据：
+   - 创建长度为 `4 + payload.length` 的字节数组
+   - 将头部（4 字节）复制到数组的前 4 个位置
+   - 将 payload 复制到数组从第 4 字节开始的位置
+4. 通过 WebSocket 发送二进制消息
+
+**示例代码逻辑:**
+
+**Java 示例:**
+
+```java
+// 准备 Opus 数据
+byte[] opusPayload = ...; // Opus 编码的音频数据
+
+// 创建带头部的完整数据
+byte[] payloadWithHeader = new byte[4 + opusPayload.length];
+payloadWithHeader[0] = 0;  // header byte 0
+payloadWithHeader[1] = 0;  // header byte 1
+// 大端格式写入 payload 长度
+payloadWithHeader[2] = (byte) ((opusPayload.length >> 8) & 0xFF);  // 高字节
+payloadWithHeader[3] = (byte) (opusPayload.length & 0xFF);         // 低字节
+// 复制 payload 到第 4 字节开始的位置
+System.arraycopy(opusPayload, 0, payloadWithHeader, 4, opusPayload.length);
+
+// 通过 WebSocket 发送二进制消息
+webSocket.send(ByteString.of(payloadWithHeader));
+```
+
+**C 语言示例:**
+
+```c
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+// 函数：发送 Opus 音频数据
+// 参数：opus_data - Opus 编码的音频数据
+//       opus_len - Opus 数据的长度
+// 返回：带头部的完整数据（需要调用者释放内存）
+uint8_t* prepare_opus_message(const uint8_t* opus_data, size_t opus_len, size_t* total_len) {
+    // 计算总长度：4 字节头部 + payload 长度
+    *total_len = 4 + opus_len;
+    
+    // 分配内存
+    uint8_t* message = (uint8_t*)malloc(*total_len);
+    if (message == NULL) {
+        return NULL;
+    }
+    
+    // 设置头部
+    message[0] = 0;  // header byte 0
+    message[1] = 0;  // header byte 1
+    
+    // 大端格式写入 payload 长度
+    message[2] = (uint8_t)((opus_len >> 8) & 0xFF);  // 高字节
+    message[3] = (uint8_t)(opus_len & 0xFF);         // 低字节
+    
+    // 复制 payload 到第 4 字节开始的位置
+    memcpy(message + 4, opus_data, opus_len);
+    
+    return message;
+}
+
+// 使用示例
+void send_audio_example(const uint8_t* opus_data, size_t opus_len) {
+    size_t total_len;
+    uint8_t* message = prepare_opus_message(opus_data, opus_len, &total_len);
+    
+    if (message != NULL) {
+        // 通过 WebSocket 发送二进制消息
+        // websocket_send_binary(message, total_len);
+        
+        // 释放内存
+        free(message);
+    }
+}
+```
+
+**注意事项:**
+- 必须等待收到 hello ack 后才能开始发送音频数据
+- payload 长度使用大端序（big-endian）编码
+- 头部的第 0 和第 1 字节固定为 0
 
 #### 4. 切换语言消息
 
