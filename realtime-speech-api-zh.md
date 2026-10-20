@@ -153,10 +153,16 @@
 
 ### 接口信息
 
-- **接口地址:** `{host}/api/ai-headset/caitun/websockets`
+- **接口地址:** `{host}/api/ai-headset/caitun/websockets?gender={gender}`
 - **请求方法:** `POST`
 - **Content-Type:** `application/json`
 - **认证方式:** Bearer Token + 签名验证
+
+### Query 参数
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| gender | Int | 否 | 性别：0-女，1-男。不传默认 0 |
 
 ### 请求头
 

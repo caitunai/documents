@@ -153,10 +153,16 @@
 
 ### API Information
 
-- **Endpoint:** `{host}/api/ai-headset/caitun/websockets`
+- **Endpoint:** `{host}/api/ai-headset/caitun/websockets?gender={gender}`
 - **Method:** `POST`
 - **Content-Type:** `application/json`
 - **Authentication:** Bearer Token + Signature Verification
+
+### Query Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| gender | Int | No | Gender: 0-female, 1-male. Defaults to 0 if not passed |
 
 ### Request Headers
 
